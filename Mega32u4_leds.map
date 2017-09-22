@@ -1,6 +1,8 @@
 RAM Allocation
 Variable                                                          Address   Size
 --------------------------------------------------------------------------------
+rx_buffer1                                                        0x0380       8
+tx_buffer1                                                        0x0388       8
 
 EEPROM Allocation
 Variable                                                          Address   Size
@@ -9,5 +11,12 @@ Variable                                                          Address   Size
 Register Allocation
 Variable                                                          Register  Size
 --------------------------------------------------------------------------------
-timer0                                                            R3,R4        2
-timer1                                                            R5,R6        2
+rx_wr_index1                                                      R4           1
+rx_rd_index1                                                      R3           1
+rx_counter1                                                       R6           1
+timer0                                                            R7,R8        2
+timer1                                                            R9,R10       2
+rx_buffer_overflow1                                               GPIOR0.0  1bit
+tx_wr_index1                                                      R5           1
+tx_rd_index1                                                      R12          1
+tx_counter1                                                       R11          1

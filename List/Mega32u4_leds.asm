@@ -1059,8 +1059,14 @@ __DELAY_USW_LOOP:
 	.ENDM
 
 ;NAME DEFINITIONS FOR GLOBAL VARIABLES ALLOCATED TO REGISTERS
-	.DEF _timer0=R3
-	.DEF _timer1=R5
+	.DEF _rx_wr_index1=R4
+	.DEF _rx_rd_index1=R3
+	.DEF _rx_counter1=R6
+	.DEF _timer0=R7
+	.DEF _timer1=R9
+	.DEF _tx_wr_index1=R5
+	.DEF _tx_rd_index1=R12
+	.DEF _tx_counter1=R11
 
 ;GPIOR0 INITIALIZATION VALUE
 	.EQU __GPIOR0_INIT=0x00
@@ -1097,9 +1103,9 @@ __START_OF_CODE:
 	JMP  0x00
 	JMP  0x00
 	JMP  0x00
+	JMP  _usart1_rx_isr
 	JMP  0x00
-	JMP  0x00
-	JMP  0x00
+	JMP  _usart1_tx_isr
 	JMP  0x00
 	JMP  0x00
 	JMP  0x00
@@ -1116,13 +1122,19 @@ __START_OF_CODE:
 	JMP  0x00
 	JMP  0x00
 
-_0x18:
+_tbl10_G100:
+	.DB  0x10,0x27,0xE8,0x3,0x64,0x0,0xA,0x0
+	.DB  0x1,0x0
+_tbl16_G100:
+	.DB  0x0,0x10,0x0,0x1,0x10,0x0,0x1,0x0
+
+_0x2C:
 	.DB  0x0,0x0,0x0,0x0
 
 __GLOBAL_INI_TBL:
 	.DW  0x04
-	.DW  0x03
-	.DW  _0x18*2
+	.DW  0x07
+	.DW  _0x2C*2
 
 _0xFFFFFFFF:
 	.DW  0
@@ -1248,443 +1260,749 @@ __GLOBAL_INI_END:
 	.SET power_ctrl_reg=smcr
 	#endif
 ;
+;#ifndef RXB8
+;#define RXB8 1
+;#endif
+;
+;#ifndef TXB8
+;#define TXB8 0
+;#endif
+;
+;#ifndef UPE
+;#define UPE 2
+;#endif
+;
+;#ifndef DOR
+;#define DOR 3
+;#endif
+;
+;#ifndef FE
+;#define FE 4
+;#endif
+;
+;#ifndef UDRE
+;#define UDRE 5
+;#endif
+;
+;#ifndef RXC
+;#define RXC 7
+;#endif
+;
+;#define FRAMING_ERROR (1<<FE)
+;#define PARITY_ERROR (1<<UPE)
+;#define DATA_OVERRUN (1<<DOR)
+;#define DATA_REGISTER_EMPTY (1<<UDRE)
+;#define RX_COMPLETE (1<<RXC)
+;
+;// USART1 Receiver buffer
+;#define RX_BUFFER_SIZE1 8
+;char rx_buffer1[RX_BUFFER_SIZE1];
+;
+;#if RX_BUFFER_SIZE1 <= 256
+;unsigned char rx_wr_index1,rx_rd_index1,rx_counter1;
+;#else
+;unsigned int rx_wr_index1,rx_rd_index1,rx_counter1;
+;#endif
+;
+;void putchar(char c);
 ;unsigned int timer0 = 0, timer1 = 0;
 ;
 ;// Timer 0 overflow interrupt service routine
 ;interrupt [TIM0_COMPA] void timer0_compa_isr(void)
-; 0000 001E {
+; 0000 004B {
 
 	.CSEG
 _timer0_compa_isr:
-	RCALL SUBOPT_0x0
-; 0000 001F // Place your code here
-; 0000 0020     timer0 = timer0 + 1;
-	__ADDWRR 3,4,30,31
-; 0000 0021     if (timer0 > 250)
+	CALL SUBOPT_0x0
+; 0000 004C // Place your code here
+; 0000 004D     timer0 = timer0 + 1;
+	__ADDWRR 7,8,30,31
+; 0000 004E     if (timer0 > 250)
 	LDI  R30,LOW(250)
 	LDI  R31,HIGH(250)
-	CP   R30,R3
-	CPC  R31,R4
+	CP   R30,R7
+	CPC  R31,R8
 	BRSH _0x3
-; 0000 0022     {
-; 0000 0023         timer0 = 0;
-	CLR  R3
-	CLR  R4
-; 0000 0024     }
-; 0000 0025 }
+; 0000 004F     {
+; 0000 0050         timer0 = 0;
+	CLR  R7
+	CLR  R8
+; 0000 0051         putchar('A');
+	LDI  R30,LOW(65)
+	ST   -Y,R30
+	RCALL _putchar
+; 0000 0052     }
+; 0000 0053 }
 _0x3:
-	RJMP _0x17
+	RJMP _0x2B
 ;
 ;// Timer1 overflow interrupt service routine
 ;interrupt [TIM1_OVF] void timer1_ovf_isr(void)
-; 0000 0029 {
+; 0000 0057 {
 _timer1_ovf_isr:
-	RCALL SUBOPT_0x0
-; 0000 002A // Place your code here
-; 0000 002B     timer1 = timer1 + 1;
-	__ADDWRR 5,6,30,31
-; 0000 002C     if (timer1 > 100)
+	CALL SUBOPT_0x0
+; 0000 0058 // Place your code here
+; 0000 0059     timer1 = timer1 + 1;
+	__ADDWRR 9,10,30,31
+; 0000 005A     if (timer1 > 100)
 	LDI  R30,LOW(100)
 	LDI  R31,HIGH(100)
-	CP   R30,R5
-	CPC  R31,R6
+	CP   R30,R9
+	CPC  R31,R10
 	BRSH _0x4
-; 0000 002D     {
-; 0000 002E         timer1 = 0;
-	CLR  R5
-	CLR  R6
-; 0000 002F     }
-; 0000 0030 }
+; 0000 005B     {
+; 0000 005C         timer1 = 0;
+	CLR  R9
+	CLR  R10
+; 0000 005D         putchar('p');
+	LDI  R30,LOW(112)
+	ST   -Y,R30
+	RCALL _putchar
+; 0000 005E     }
+; 0000 005F }
 _0x4:
-_0x17:
+_0x2B:
+	LD   R30,Y+
+	OUT  SREG,R30
+	LD   R31,Y+
+	LD   R30,Y+
+	LD   R27,Y+
+	LD   R26,Y+
+	LD   R25,Y+
+	LD   R24,Y+
+	LD   R23,Y+
+	LD   R22,Y+
+	LD   R15,Y+
+	LD   R1,Y+
+	LD   R0,Y+
+	RETI
+;
+;
+;// This flag is set on USART1 Receiver buffer overflow
+;bit rx_buffer_overflow1;
+;
+;// USART1 Receiver interrupt service routine
+;interrupt [USART1_RXC] void usart1_rx_isr(void)
+; 0000 0067 {
+_usart1_rx_isr:
+	ST   -Y,R30
+	ST   -Y,R31
+	IN   R30,SREG
+	ST   -Y,R30
+; 0000 0068 char status,data;
+; 0000 0069 status=UCSR1A;
+	ST   -Y,R17
+	ST   -Y,R16
+;	status -> R17
+;	data -> R16
+	LDS  R17,200
+; 0000 006A data=UDR1;
+	LDS  R16,206
+; 0000 006B if ((status & (FRAMING_ERROR | PARITY_ERROR | DATA_OVERRUN))==0)
+	MOV  R30,R17
+	ANDI R30,LOW(0x1C)
+	BRNE _0x5
+; 0000 006C    {
+; 0000 006D    rx_buffer1[rx_wr_index1++]=data;
+	MOV  R30,R4
+	INC  R4
+	LDI  R31,0
+	SUBI R30,LOW(-_rx_buffer1)
+	SBCI R31,HIGH(-_rx_buffer1)
+	ST   Z,R16
+; 0000 006E #if RX_BUFFER_SIZE1 == 256
+; 0000 006F    // special case for receiver buffer size=256
+; 0000 0070    if (++rx_counter1 == 0)
+; 0000 0071       {
+; 0000 0072 #else
+; 0000 0073    if (rx_wr_index1 == RX_BUFFER_SIZE1) rx_wr_index1=0;
+	LDI  R30,LOW(8)
+	CP   R30,R4
+	BRNE _0x6
+	CLR  R4
+; 0000 0074    if (++rx_counter1 == RX_BUFFER_SIZE1)
+_0x6:
+	INC  R6
+	LDI  R30,LOW(8)
+	CP   R30,R6
+	BRNE _0x7
+; 0000 0075       {
+; 0000 0076       rx_counter1=0;
+	CLR  R6
+; 0000 0077 #endif
+; 0000 0078       rx_buffer_overflow1=1;
+	SBI  0x1E,0
+; 0000 0079       }
+; 0000 007A    }
+_0x7:
+; 0000 007B }
+_0x5:
+	LD   R16,Y+
+	LD   R17,Y+
+	RJMP _0x2A
+;
+;#ifndef _DEBUG_TERMINAL_IO_
+;// Get a character from the USART1 Receiver buffer
+;#define _ALTERNATE_GETCHAR_
+;#pragma used+
+;char getchar(void)
+; 0000 0082 {
+; 0000 0083 char data;
+; 0000 0084 while (rx_counter1==0);
+;	data -> R17
+; 0000 0085 data=rx_buffer1[rx_rd_index1++];
+; 0000 0086 #if RX_BUFFER_SIZE1 != 256
+; 0000 0087 if (rx_rd_index1 == RX_BUFFER_SIZE1) rx_rd_index1=0;
+; 0000 0088 #endif
+; 0000 0089 #asm("cli")
+; 0000 008A --rx_counter1;
+; 0000 008B #asm("sei")
+; 0000 008C return data;
+; 0000 008D }
+;#pragma used-
+;#endif
+;
+;// USART1 Transmitter buffer
+;#define TX_BUFFER_SIZE1 8
+;char tx_buffer1[TX_BUFFER_SIZE1];
+;
+;#if TX_BUFFER_SIZE1 <= 256
+;unsigned char tx_wr_index1,tx_rd_index1,tx_counter1;
+;#else
+;unsigned int tx_wr_index1,tx_rd_index1,tx_counter1;
+;#endif
+;
+;// USART1 Transmitter interrupt service routine
+;interrupt [USART1_TXC] void usart1_tx_isr(void)
+; 0000 009D {
+_usart1_tx_isr:
+	ST   -Y,R30
+	ST   -Y,R31
+	IN   R30,SREG
+	ST   -Y,R30
+; 0000 009E if (tx_counter1)
+	TST  R11
+	BREQ _0xE
+; 0000 009F    {
+; 0000 00A0    --tx_counter1;
+	DEC  R11
+; 0000 00A1    UDR1=tx_buffer1[tx_rd_index1++];
+	MOV  R30,R12
+	INC  R12
+	LDI  R31,0
+	SUBI R30,LOW(-_tx_buffer1)
+	SBCI R31,HIGH(-_tx_buffer1)
+	LD   R30,Z
+	STS  206,R30
+; 0000 00A2 #if TX_BUFFER_SIZE1 != 256
+; 0000 00A3    if (tx_rd_index1 == TX_BUFFER_SIZE1) tx_rd_index1=0;
+	LDI  R30,LOW(8)
+	CP   R30,R12
+	BRNE _0xF
+	CLR  R12
+; 0000 00A4 #endif
+; 0000 00A5    }
+_0xF:
+; 0000 00A6 }
+_0xE:
+_0x2A:
 	LD   R30,Y+
 	OUT  SREG,R30
 	LD   R31,Y+
 	LD   R30,Y+
 	RETI
 ;
+;#ifndef _DEBUG_TERMINAL_IO_
+;// Write a character to the USART1 Transmitter buffer
+;#define _ALTERNATE_PUTCHAR_
+;#pragma used+
+;void putchar(char c)
+; 0000 00AD {
+_putchar:
+; 0000 00AE while (tx_counter1 == TX_BUFFER_SIZE1);
+;	c -> Y+0
+_0x10:
+	LDI  R30,LOW(8)
+	CP   R30,R11
+	BREQ _0x10
+; 0000 00AF #asm("cli")
+	cli
+; 0000 00B0 if (tx_counter1 || ((UCSR1A & DATA_REGISTER_EMPTY)==0))
+	TST  R11
+	BRNE _0x14
+	LDS  R30,200
+	ANDI R30,LOW(0x20)
+	BRNE _0x13
+_0x14:
+; 0000 00B1    {
+; 0000 00B2    tx_buffer1[tx_wr_index1++]=c;
+	MOV  R30,R5
+	INC  R5
+	LDI  R31,0
+	SUBI R30,LOW(-_tx_buffer1)
+	SBCI R31,HIGH(-_tx_buffer1)
+	LD   R26,Y
+	STD  Z+0,R26
+; 0000 00B3 #if TX_BUFFER_SIZE1 != 256
+; 0000 00B4    if (tx_wr_index1 == TX_BUFFER_SIZE1) tx_wr_index1=0;
+	LDI  R30,LOW(8)
+	CP   R30,R5
+	BRNE _0x16
+	CLR  R5
+; 0000 00B5 #endif
+; 0000 00B6    ++tx_counter1;
+_0x16:
+	INC  R11
+; 0000 00B7    }
+; 0000 00B8 else
+	RJMP _0x17
+_0x13:
+; 0000 00B9    UDR1=c;
+	LD   R30,Y
+	STS  206,R30
+; 0000 00BA #asm("sei")
+_0x17:
+	sei
+; 0000 00BB }
+	ADIW R28,1
+	RET
+;#pragma used-
+;#endif
+;
+;
+;// Standard Input/Output functions
+;#include <stdio.h>
+;
 ;// Declare your global variables here
 ;
 ;void main(void)
-; 0000 0035 {
+; 0000 00C6 {
 _main:
-; 0000 0036 // Declare your local variables here
-; 0000 0037 
-; 0000 0038 // Crystal Oscillator division factor: 1
-; 0000 0039 #pragma optsize-
-; 0000 003A CLKPR=0x80;
+; 0000 00C7 // Declare your local variables here
+; 0000 00C8 
+; 0000 00C9 // Crystal Oscillator division factor: 1
+; 0000 00CA #pragma optsize-
+; 0000 00CB CLKPR=0x80;
 	LDI  R30,LOW(128)
 	STS  97,R30
-; 0000 003B CLKPR=0x00;
+; 0000 00CC CLKPR=0x00;
 	LDI  R30,LOW(0)
 	STS  97,R30
-; 0000 003C #ifdef _OPTIMIZE_SIZE_
-; 0000 003D #pragma optsize+
-; 0000 003E #endif
-; 0000 003F 
-; 0000 0040 // Input/Output Ports initialization
-; 0000 0041 // Port B initialization
-; 0000 0042 // Func7=In Func6=In Func5=In Func4=In Func3=Out Func2=Out Func1=Out Func0=Out
-; 0000 0043 // State7=T State6=T State5=T State4=T State3=0 State2=0 State1=0 State0=0
-; 0000 0044 PORTB=0x00;
+; 0000 00CD #ifdef _OPTIMIZE_SIZE_
+; 0000 00CE #pragma optsize+
+; 0000 00CF #endif
+; 0000 00D0 
+; 0000 00D1 // Input/Output Ports initialization
+; 0000 00D2 // Port B initialization
+; 0000 00D3 // Func7=In Func6=In Func5=In Func4=In Func3=Out Func2=Out Func1=Out Func0=Out
+; 0000 00D4 // State7=T State6=T State5=T State4=T State3=0 State2=0 State1=0 State0=0
+; 0000 00D5 PORTB=0x00;
 	OUT  0x5,R30
-; 0000 0045 DDRB=0x0F;
+; 0000 00D6 DDRB=0x0F;
 	LDI  R30,LOW(15)
 	OUT  0x4,R30
-; 0000 0046 
-; 0000 0047 // Port C initialization
-; 0000 0048 // Func7=In Func6=In Func5=In Func4=In Func3=In Func2=In Func1=In Func0=In
-; 0000 0049 // State7=T State6=T State5=T State4=T State3=T State2=T State1=T State0=T
-; 0000 004A PORTC=0x00;
+; 0000 00D7 
+; 0000 00D8 // Port C initialization
+; 0000 00D9 // Func7=In Func6=In Func5=In Func4=In Func3=In Func2=In Func1=In Func0=In
+; 0000 00DA // State7=T State6=T State5=T State4=T State3=T State2=T State1=T State0=T
+; 0000 00DB PORTC=0x00;
 	LDI  R30,LOW(0)
 	OUT  0x8,R30
-; 0000 004B DDRC=0x00;
+; 0000 00DC DDRC=0x00;
 	OUT  0x7,R30
-; 0000 004C 
-; 0000 004D // Port D initialization
-; 0000 004E // Func7=In Func6=In Func5=In Func4=In Func3=In Func2=In Func1=In Func0=In
-; 0000 004F // State7=T State6=T State5=T State4=T State3=T State2=T State1=T State0=T
-; 0000 0050 PORTD=0x00;
+; 0000 00DD 
+; 0000 00DE // Port D initialization
+; 0000 00DF // Func7=In Func6=In Func5=In Func4=In Func3=In Func2=In Func1=In Func0=In
+; 0000 00E0 // State7=T State6=T State5=T State4=T State3=T State2=T State1=T State0=T
+; 0000 00E1 PORTD=0x00;
 	OUT  0xB,R30
-; 0000 0051 DDRD=0x00;
+; 0000 00E2 DDRD=0x00;
 	OUT  0xA,R30
-; 0000 0052 
-; 0000 0053 // Port E initialization
-; 0000 0054 // Func7=In Func6=In Func5=In Func4=In Func3=In Func2=In Func1=In Func0=In
-; 0000 0055 // State7=T State6=T State5=T State4=T State3=T State2=T State1=T State0=T
-; 0000 0056 PORTE=0x00;
+; 0000 00E3 
+; 0000 00E4 // Port E initialization
+; 0000 00E5 // Func7=In Func6=In Func5=In Func4=In Func3=In Func2=In Func1=In Func0=In
+; 0000 00E6 // State7=T State6=T State5=T State4=T State3=T State2=T State1=T State0=T
+; 0000 00E7 PORTE=0x00;
 	OUT  0xE,R30
-; 0000 0057 DDRE=0x00;
+; 0000 00E8 DDRE=0x00;
 	OUT  0xD,R30
-; 0000 0058 
-; 0000 0059 // Port F initialization
-; 0000 005A // Func7=In Func6=In Func5=In Func4=In Func3=In Func2=In Func1=In Func0=In
-; 0000 005B // State7=T State6=T State5=T State4=T State3=T State2=T State1=T State0=T
-; 0000 005C PORTF=0x00;
+; 0000 00E9 
+; 0000 00EA // Port F initialization
+; 0000 00EB // Func7=In Func6=In Func5=In Func4=In Func3=In Func2=In Func1=In Func0=In
+; 0000 00EC // State7=T State6=T State5=T State4=T State3=T State2=T State1=T State0=T
+; 0000 00ED PORTF=0x00;
 	OUT  0x11,R30
-; 0000 005D DDRF=0x00;
+; 0000 00EE DDRF=0x00;
 	OUT  0x10,R30
-; 0000 005E 
-; 0000 005F // PLL initialization
-; 0000 0060 // PLL Enabled: Off
-; 0000 0061 PLLCSR=0x00;
+; 0000 00EF 
+; 0000 00F0 // PLL initialization
+; 0000 00F1 // PLL Enabled: Off
+; 0000 00F2 PLLCSR=0x00;
 	OUT  0x29,R30
-; 0000 0062 PLLFRQ=0x00;
+; 0000 00F3 PLLFRQ=0x00;
 	OUT  0x32,R30
-; 0000 0063 
-; 0000 0064 // Timer/Counter 0 initialization
-; 0000 0065 // Clock source: System Clock
-; 0000 0066 // Clock value: 31.250 kHz
-; 0000 0067 // Mode: CTC top=OCR0A
-; 0000 0068 // OC0A output: Disconnected
-; 0000 0069 // OC0B output: Disconnected
-; 0000 006A TCCR0A=0x02;
+; 0000 00F4 
+; 0000 00F5 // Timer/Counter 0 initialization
+; 0000 00F6 // Clock source: System Clock
+; 0000 00F7 // Clock value: 31.250 kHz
+; 0000 00F8 // Mode: CTC top=OCR0A
+; 0000 00F9 // OC0A output: Disconnected
+; 0000 00FA // OC0B output: Disconnected
+; 0000 00FB TCCR0A=0x02;
 	LDI  R30,LOW(2)
 	OUT  0x24,R30
-; 0000 006B TCCR0B=0x04;
+; 0000 00FC TCCR0B=0x04;
 	LDI  R30,LOW(4)
 	OUT  0x25,R30
-; 0000 006C TCNT0=0x00;
+; 0000 00FD TCNT0=0x00;
 	LDI  R30,LOW(0)
 	OUT  0x26,R30
-; 0000 006D OCR0A=0xFA;
+; 0000 00FE OCR0A=0xFA;
 	LDI  R30,LOW(250)
 	OUT  0x27,R30
-; 0000 006E OCR0B=0x00;
+; 0000 00FF OCR0B=0x00;
 	LDI  R30,LOW(0)
 	OUT  0x28,R30
-; 0000 006F 
-; 0000 0070 // Timer/Counter 1 initialization
-; 0000 0071 // Clock source: System Clock
-; 0000 0072 // Clock value: 31.250 kHz
-; 0000 0073 // Mode: Normal top=0xFFFF
-; 0000 0074 // OC1A output: Discon.
-; 0000 0075 // OC1B output: Discon.
-; 0000 0076 // OC1C output: Discon.
-; 0000 0077 // Noise Canceler: Off
-; 0000 0078 // Input Capture on Falling Edge
-; 0000 0079 // Timer1 Overflow Interrupt: On
-; 0000 007A // Input Capture Interrupt: Off
-; 0000 007B // Compare A Match Interrupt: Off
-; 0000 007C // Compare B Match Interrupt: Off
-; 0000 007D // Compare C Match Interrupt: Off
-; 0000 007E TCCR1A=0x00;
+; 0000 0100 
+; 0000 0101 // Timer/Counter 1 initialization
+; 0000 0102 // Clock source: System Clock
+; 0000 0103 // Clock value: 31.250 kHz
+; 0000 0104 // Mode: Normal top=0xFFFF
+; 0000 0105 // OC1A output: Discon.
+; 0000 0106 // OC1B output: Discon.
+; 0000 0107 // OC1C output: Discon.
+; 0000 0108 // Noise Canceler: Off
+; 0000 0109 // Input Capture on Falling Edge
+; 0000 010A // Timer1 Overflow Interrupt: On
+; 0000 010B // Input Capture Interrupt: Off
+; 0000 010C // Compare A Match Interrupt: Off
+; 0000 010D // Compare B Match Interrupt: Off
+; 0000 010E // Compare C Match Interrupt: Off
+; 0000 010F TCCR1A=0x00;
 	STS  128,R30
-; 0000 007F TCCR1B=0x04;
+; 0000 0110 TCCR1B=0x04;
 	LDI  R30,LOW(4)
 	STS  129,R30
-; 0000 0080 TCNT1H=0x00;
+; 0000 0111 TCNT1H=0x00;
 	LDI  R30,LOW(0)
 	STS  133,R30
-; 0000 0081 TCNT1L=0x00;
+; 0000 0112 TCNT1L=0x00;
 	STS  132,R30
-; 0000 0082 ICR1H=0x00;
+; 0000 0113 ICR1H=0x00;
 	STS  135,R30
-; 0000 0083 ICR1L=0x00;
+; 0000 0114 ICR1L=0x00;
 	STS  134,R30
-; 0000 0084 OCR1AH=0x00;
+; 0000 0115 OCR1AH=0x00;
 	STS  137,R30
-; 0000 0085 OCR1AL=0x00;
+; 0000 0116 OCR1AL=0x00;
 	STS  136,R30
-; 0000 0086 OCR1BH=0x00;
+; 0000 0117 OCR1BH=0x00;
 	STS  139,R30
-; 0000 0087 OCR1BL=0x00;
+; 0000 0118 OCR1BL=0x00;
 	STS  138,R30
-; 0000 0088 OCR1CH=0x00;
+; 0000 0119 OCR1CH=0x00;
 	STS  141,R30
-; 0000 0089 OCR1CL=0x00;
+; 0000 011A OCR1CL=0x00;
 	STS  140,R30
-; 0000 008A 
-; 0000 008B // Timer/Counter 3 initialization
-; 0000 008C // Clock source: System Clock
-; 0000 008D // Clock value: Timer3 Stopped
-; 0000 008E // Mode: Normal top=0xFFFF
-; 0000 008F // OC3A output: Discon.
-; 0000 0090 // OC3B output: Discon.
-; 0000 0091 // OC3C output: Discon.
-; 0000 0092 // Noise Canceler: Off
-; 0000 0093 // Input Capture on Falling Edge
-; 0000 0094 // Timer3 Overflow Interrupt: Off
-; 0000 0095 // Input Capture Interrupt: Off
-; 0000 0096 // Compare A Match Interrupt: Off
-; 0000 0097 // Compare B Match Interrupt: Off
-; 0000 0098 // Compare C Match Interrupt: Off
-; 0000 0099 TCCR3A=0x00;
+; 0000 011B 
+; 0000 011C // Timer/Counter 3 initialization
+; 0000 011D // Clock source: System Clock
+; 0000 011E // Clock value: Timer3 Stopped
+; 0000 011F // Mode: Normal top=0xFFFF
+; 0000 0120 // OC3A output: Discon.
+; 0000 0121 // OC3B output: Discon.
+; 0000 0122 // OC3C output: Discon.
+; 0000 0123 // Noise Canceler: Off
+; 0000 0124 // Input Capture on Falling Edge
+; 0000 0125 // Timer3 Overflow Interrupt: Off
+; 0000 0126 // Input Capture Interrupt: Off
+; 0000 0127 // Compare A Match Interrupt: Off
+; 0000 0128 // Compare B Match Interrupt: Off
+; 0000 0129 // Compare C Match Interrupt: Off
+; 0000 012A TCCR3A=0x00;
 	STS  144,R30
-; 0000 009A TCCR3B=0x00;
+; 0000 012B TCCR3B=0x00;
 	STS  145,R30
-; 0000 009B TCNT3H=0x00;
+; 0000 012C TCNT3H=0x00;
 	STS  149,R30
-; 0000 009C TCNT3L=0x00;
+; 0000 012D TCNT3L=0x00;
 	STS  148,R30
-; 0000 009D ICR3H=0x00;
+; 0000 012E ICR3H=0x00;
 	STS  151,R30
-; 0000 009E ICR3L=0x00;
+; 0000 012F ICR3L=0x00;
 	STS  150,R30
-; 0000 009F OCR3AH=0x00;
+; 0000 0130 OCR3AH=0x00;
 	STS  153,R30
-; 0000 00A0 OCR3AL=0x00;
+; 0000 0131 OCR3AL=0x00;
 	STS  152,R30
-; 0000 00A1 OCR3BH=0x00;
+; 0000 0132 OCR3BH=0x00;
 	STS  155,R30
-; 0000 00A2 OCR3BL=0x00;
+; 0000 0133 OCR3BL=0x00;
 	STS  154,R30
-; 0000 00A3 OCR3CH=0x00;
+; 0000 0134 OCR3CH=0x00;
 	STS  157,R30
-; 0000 00A4 OCR3CL=0x00;
+; 0000 0135 OCR3CL=0x00;
 	STS  156,R30
-; 0000 00A5 
-; 0000 00A6 // Timer/Counter 4 initialization
-; 0000 00A7 // Clock: Timer4 Stopped
-; 0000 00A8 // Mode: Normal top=OCR4C
-; 0000 00A9 // OC4A output: OC4A=Disc. /OC4A=Disc.
-; 0000 00AA // OC4B output: OC4B=Disc. /OC4B=Disc.
-; 0000 00AB // OC4D output: OC4D=Disc. /OC4D=Disc.
-; 0000 00AC // Fault Protection: Off
-; 0000 00AD // Fault Protection Noise Canceler: Off
-; 0000 00AE // Fault Protection triggered on Falling Edge
-; 0000 00AF // Timer4 Overflow Interrupt: Off
-; 0000 00B0 // Compare A Match Interrupt: Off
-; 0000 00B1 // Compare B Match Interrupt: Off
-; 0000 00B2 // Compare D Match Interrupt: Off
-; 0000 00B3 // Fault Protection Interrupt: Off
-; 0000 00B4 // Dead Time Prescaler: 1
-; 0000 00B5 // Dead Time Rising Edge: 0.000 us
-; 0000 00B6 // Dead Time Falling Edge: 0.000 us
-; 0000 00B7 
-; 0000 00B8 // Set Timer4 synchronous operation
-; 0000 00B9 PLLFRQ&=0xcf;
+; 0000 0136 
+; 0000 0137 // Timer/Counter 4 initialization
+; 0000 0138 // Clock: Timer4 Stopped
+; 0000 0139 // Mode: Normal top=OCR4C
+; 0000 013A // OC4A output: OC4A=Disc. /OC4A=Disc.
+; 0000 013B // OC4B output: OC4B=Disc. /OC4B=Disc.
+; 0000 013C // OC4D output: OC4D=Disc. /OC4D=Disc.
+; 0000 013D // Fault Protection: Off
+; 0000 013E // Fault Protection Noise Canceler: Off
+; 0000 013F // Fault Protection triggered on Falling Edge
+; 0000 0140 // Timer4 Overflow Interrupt: Off
+; 0000 0141 // Compare A Match Interrupt: Off
+; 0000 0142 // Compare B Match Interrupt: Off
+; 0000 0143 // Compare D Match Interrupt: Off
+; 0000 0144 // Fault Protection Interrupt: Off
+; 0000 0145 // Dead Time Prescaler: 1
+; 0000 0146 // Dead Time Rising Edge: 0.000 us
+; 0000 0147 // Dead Time Falling Edge: 0.000 us
+; 0000 0148 
+; 0000 0149 // Set Timer4 synchronous operation
+; 0000 014A PLLFRQ&=0xcf;
 	IN   R30,0x32
 	ANDI R30,LOW(0xCF)
 	OUT  0x32,R30
-; 0000 00BA 
-; 0000 00BB TCCR4A=0x00;
+; 0000 014B 
+; 0000 014C TCCR4A=0x00;
 	LDI  R30,LOW(0)
 	STS  192,R30
-; 0000 00BC TCCR4B=0x00;
+; 0000 014D TCCR4B=0x00;
 	STS  193,R30
-; 0000 00BD TCCR4C=0x00;
+; 0000 014E TCCR4C=0x00;
 	STS  194,R30
-; 0000 00BE TCCR4D=0x00;
+; 0000 014F TCCR4D=0x00;
 	STS  195,R30
-; 0000 00BF TC4H=0x00;
-	RCALL SUBOPT_0x1
-; 0000 00C0 TCNT4=0x00;
+; 0000 0150 TC4H=0x00;
+	CALL SUBOPT_0x1
+; 0000 0151 TCNT4=0x00;
 	STS  190,R30
-; 0000 00C1 TC4H=0x00;
-	RCALL SUBOPT_0x1
-; 0000 00C2 OCR4A=0x00;
+; 0000 0152 TC4H=0x00;
+	CALL SUBOPT_0x1
+; 0000 0153 OCR4A=0x00;
 	STS  207,R30
-; 0000 00C3 TC4H=0x00;
-	RCALL SUBOPT_0x1
-; 0000 00C4 OCR4B=0x00;
+; 0000 0154 TC4H=0x00;
+	CALL SUBOPT_0x1
+; 0000 0155 OCR4B=0x00;
 	STS  208,R30
-; 0000 00C5 TC4H=0x00;
-	RCALL SUBOPT_0x1
-; 0000 00C6 OCR4C=0x00;
+; 0000 0156 TC4H=0x00;
+	CALL SUBOPT_0x1
+; 0000 0157 OCR4C=0x00;
 	STS  209,R30
-; 0000 00C7 TC4H=0x00;
-	RCALL SUBOPT_0x1
-; 0000 00C8 OCR4D=0x00;
+; 0000 0158 TC4H=0x00;
+	CALL SUBOPT_0x1
+; 0000 0159 OCR4D=0x00;
 	STS  210,R30
-; 0000 00C9 DT4=0x00;
+; 0000 015A DT4=0x00;
 	LDI  R30,LOW(0)
 	STS  212,R30
-; 0000 00CA 
-; 0000 00CB // External Interrupt(s) initialization
-; 0000 00CC // INT0: Off
-; 0000 00CD // INT1: Off
-; 0000 00CE // INT2: Off
-; 0000 00CF // INT3: Off
-; 0000 00D0 // INT6: Off
-; 0000 00D1 EICRA=0x00;
+; 0000 015B 
+; 0000 015C // External Interrupt(s) initialization
+; 0000 015D // INT0: Off
+; 0000 015E // INT1: Off
+; 0000 015F // INT2: Off
+; 0000 0160 // INT3: Off
+; 0000 0161 // INT6: Off
+; 0000 0162 EICRA=0x00;
 	STS  105,R30
-; 0000 00D2 EICRB=0x00;
+; 0000 0163 EICRB=0x00;
 	STS  106,R30
-; 0000 00D3 EIMSK=0x00;
+; 0000 0164 EIMSK=0x00;
 	OUT  0x1D,R30
-; 0000 00D4 // PCINT0 interrupt: Off
-; 0000 00D5 // PCINT1 interrupt: Off
-; 0000 00D6 // PCINT2 interrupt: Off
-; 0000 00D7 // PCINT3 interrupt: Off
-; 0000 00D8 // PCINT4 interrupt: Off
-; 0000 00D9 // PCINT5 interrupt: Off
-; 0000 00DA // PCINT6 interrupt: Off
-; 0000 00DB // PCINT7 interrupt: Off
-; 0000 00DC PCMSK0=0x00;
+; 0000 0165 // PCINT0 interrupt: Off
+; 0000 0166 // PCINT1 interrupt: Off
+; 0000 0167 // PCINT2 interrupt: Off
+; 0000 0168 // PCINT3 interrupt: Off
+; 0000 0169 // PCINT4 interrupt: Off
+; 0000 016A // PCINT5 interrupt: Off
+; 0000 016B // PCINT6 interrupt: Off
+; 0000 016C // PCINT7 interrupt: Off
+; 0000 016D PCMSK0=0x00;
 	STS  107,R30
-; 0000 00DD PCICR=0x00;
+; 0000 016E PCICR=0x00;
 	STS  104,R30
-; 0000 00DE 
-; 0000 00DF // Timer/Counter 0 Interrupt(s) initialization
-; 0000 00E0 TIMSK0=0x02;
+; 0000 016F 
+; 0000 0170 // Timer/Counter 0 Interrupt(s) initialization
+; 0000 0171 TIMSK0=0x02;
 	LDI  R30,LOW(2)
 	STS  110,R30
-; 0000 00E1 
-; 0000 00E2 // Timer/Counter 1 Interrupt(s) initialization
-; 0000 00E3 TIMSK1=0x01;
+; 0000 0172 
+; 0000 0173 // Timer/Counter 1 Interrupt(s) initialization
+; 0000 0174 TIMSK1=0x01;
 	LDI  R30,LOW(1)
 	STS  111,R30
-; 0000 00E4 
-; 0000 00E5 // Timer/Counter 3 Interrupt(s) initialization
-; 0000 00E6 TIMSK3=0x00;
+; 0000 0175 
+; 0000 0176 // Timer/Counter 3 Interrupt(s) initialization
+; 0000 0177 TIMSK3=0x00;
 	LDI  R30,LOW(0)
 	STS  113,R30
-; 0000 00E7 
-; 0000 00E8 // Timer/Counter 4 Interrupt(s) initialization
-; 0000 00E9 TIMSK4=0x00;
+; 0000 0178 
+; 0000 0179 // Timer/Counter 4 Interrupt(s) initialization
+; 0000 017A TIMSK4=0x00;
 	STS  114,R30
-; 0000 00EA 
-; 0000 00EB // USART1 initialization
-; 0000 00EC // USART1 disabled
-; 0000 00ED UCSR1B=0x00;
+; 0000 017B 
+; 0000 017C // USART1 initialization
+; 0000 017D // Communication Parameters: 8 Data, 1 Stop, No Parity
+; 0000 017E // USART1 Receiver: On
+; 0000 017F // USART1 Transmitter: On
+; 0000 0180 // USART1 Mode: Asynchronous
+; 0000 0181 // USART1 Baud Rate: 56000
+; 0000 0182 UCSR1A=0x00;
+	STS  200,R30
+; 0000 0183 UCSR1B=0xD8;
+	LDI  R30,LOW(216)
 	STS  201,R30
-; 0000 00EE 
-; 0000 00EF // Analog Comparator initialization
-; 0000 00F0 // Analog Comparator: Off
-; 0000 00F1 // Analog Comparator Input Capture by Timer/Counter 1: Off
-; 0000 00F2 ACSR=0x80;
+; 0000 0184 UCSR1C=0x06;
+	LDI  R30,LOW(6)
+	STS  202,R30
+; 0000 0185 UBRR1H=0x00;
+	LDI  R30,LOW(0)
+	STS  205,R30
+; 0000 0186 UBRR1L=0x08;
+	LDI  R30,LOW(8)
+	STS  204,R30
+; 0000 0187 
+; 0000 0188 // Analog Comparator initialization
+; 0000 0189 // Analog Comparator: Off
+; 0000 018A // Analog Comparator Input Capture by Timer/Counter 1: Off
+; 0000 018B ACSR=0x80;
 	LDI  R30,LOW(128)
 	OUT  0x30,R30
-; 0000 00F3 ADCSRB=0x00;
+; 0000 018C ADCSRB=0x00;
 	LDI  R30,LOW(0)
 	STS  123,R30
-; 0000 00F4 DIDR1=0x00;
+; 0000 018D DIDR1=0x00;
 	STS  127,R30
-; 0000 00F5 
-; 0000 00F6 // ADC initialization
-; 0000 00F7 // ADC disabled
-; 0000 00F8 ADCSRA=0x00;
+; 0000 018E 
+; 0000 018F // ADC initialization
+; 0000 0190 // ADC disabled
+; 0000 0191 ADCSRA=0x00;
 	STS  122,R30
-; 0000 00F9 
-; 0000 00FA // SPI initialization
-; 0000 00FB // SPI disabled
-; 0000 00FC SPCR=0x00;
+; 0000 0192 
+; 0000 0193 // SPI initialization
+; 0000 0194 // SPI disabled
+; 0000 0195 SPCR=0x00;
 	OUT  0x2C,R30
-; 0000 00FD 
-; 0000 00FE // TWI initialization
-; 0000 00FF // TWI disabled
-; 0000 0100 TWCR=0x00;
+; 0000 0196 
+; 0000 0197 // TWI initialization
+; 0000 0198 // TWI disabled
+; 0000 0199 TWCR=0x00;
 	STS  188,R30
-; 0000 0101 
-; 0000 0102 // USB Controller initialization
-; 0000 0103 // USB Mode: Disabled
-; 0000 0104 // USB Pad Regulator: Off
-; 0000 0105 // OTG (VBUS) Pad: Off
-; 0000 0106 // VBUS Transition interrupt: Off
-; 0000 0107 UHWCON=0x00;
+; 0000 019A 
+; 0000 019B // USB Controller initialization
+; 0000 019C // USB Mode: Disabled
+; 0000 019D // USB Pad Regulator: Off
+; 0000 019E // OTG (VBUS) Pad: Off
+; 0000 019F // VBUS Transition interrupt: Off
+; 0000 01A0 UHWCON=0x00;
 	STS  215,R30
-; 0000 0108 USBCON=0x00;
+; 0000 01A1 USBCON=0x00;
 	STS  216,R30
-; 0000 0109 USBINT=0; // Clear the interrupt flag
+; 0000 01A2 USBINT=0; // Clear the interrupt flag
 	STS  218,R30
-; 0000 010A 
-; 0000 010B // Global enable interrupts
-; 0000 010C #asm("sei")
+; 0000 01A3 
+; 0000 01A4 // Global enable interrupts
+; 0000 01A5 #asm("sei")
 	sei
-; 0000 010D 
-; 0000 010E while (1)
-_0x5:
-; 0000 010F       {
-; 0000 0110       // Place your code here
-; 0000 0111           if (timer0 <= 125)
+; 0000 01A6 
+; 0000 01A7 while (1)
+_0x18:
+; 0000 01A8       {
+; 0000 01A9       // Place your code here
+; 0000 01AA           if (timer0 <= 125)
 	LDI  R30,LOW(125)
 	LDI  R31,HIGH(125)
-	CP   R30,R3
-	CPC  R31,R4
-	BRLO _0x8
-; 0000 0112           {
-; 0000 0113             PORTB.0 = 1;
+	CP   R30,R7
+	CPC  R31,R8
+	BRLO _0x1B
+; 0000 01AB           {
+; 0000 01AC             PORTB.0 = 1;
 	SBI  0x5,0
-; 0000 0114           }
-; 0000 0115           else if (timer0 > 125)
-	RJMP _0xB
-_0x8:
+; 0000 01AD           }
+; 0000 01AE           else if (timer0 > 125)
+	RJMP _0x1E
+_0x1B:
 	LDI  R30,LOW(125)
 	LDI  R31,HIGH(125)
-	CP   R30,R3
-	CPC  R31,R4
-	BRSH _0xC
-; 0000 0116           {
-; 0000 0117             PORTB.0 = 0;
+	CP   R30,R7
+	CPC  R31,R8
+	BRSH _0x1F
+; 0000 01AF           {
+; 0000 01B0             PORTB.0 = 0;
 	CBI  0x5,0
-; 0000 0118           }
-; 0000 0119 
-; 0000 011A           if (timer1 <= 50)
-_0xC:
-_0xB:
+; 0000 01B1           }
+; 0000 01B2 
+; 0000 01B3           if (timer1 <= 50)
+_0x1F:
+_0x1E:
 	LDI  R30,LOW(50)
 	LDI  R31,HIGH(50)
-	CP   R30,R5
-	CPC  R31,R6
-	BRLO _0xF
-; 0000 011B           {
-; 0000 011C             PORTB.1 = 1;
+	CP   R30,R9
+	CPC  R31,R10
+	BRLO _0x22
+; 0000 01B4           {
+; 0000 01B5             PORTB.1 = 1;
 	SBI  0x5,1
-; 0000 011D           }
-; 0000 011E           else if (timer1 > 50)
-	RJMP _0x12
-_0xF:
+; 0000 01B6           }
+; 0000 01B7           else if (timer1 > 50)
+	RJMP _0x25
+_0x22:
 	LDI  R30,LOW(50)
 	LDI  R31,HIGH(50)
-	CP   R30,R5
-	CPC  R31,R6
-	BRSH _0x13
-; 0000 011F           {
-; 0000 0120             PORTB.1 = 0;
+	CP   R30,R9
+	CPC  R31,R10
+	BRSH _0x26
+; 0000 01B8           {
+; 0000 01B9             PORTB.1 = 0;
 	CBI  0x5,1
-; 0000 0121           }
-; 0000 0122       }
-_0x13:
-_0x12:
-	RJMP _0x5
-; 0000 0123 }
-_0x16:
-	RJMP _0x16
+; 0000 01BA           }
+; 0000 01BB       }
+_0x26:
+_0x25:
+	RJMP _0x18
+; 0000 01BC }
+_0x29:
+	RJMP _0x29
+	#ifndef __SLEEP_DEFINED__
+	#define __SLEEP_DEFINED__
+	.EQU __se_bit=0x01
+	.EQU __sm_mask=0x0E
+     .EQU __sm_adc_noise_red=0x02 // 26022010_1
+	.EQU __sm_powerdown=0x04
+	.EQU __sm_powersave=0x06
+	.EQU __sm_standby=0x0C
+	.EQU __sm_ext_standby=0x0E
+	.SET power_ctrl_reg=smcr
+	#endif
 
 	.CSEG
-;OPTIMIZER ADDED SUBROUTINE, CALLED 2 TIMES, CODE SIZE REDUCTION:1 WORDS
+
+	.CSEG
+
+	.CSEG
+
+	.DSEG
+_rx_buffer1:
+	.BYTE 0x8
+_tx_buffer1:
+	.BYTE 0x8
+
+	.CSEG
+;OPTIMIZER ADDED SUBROUTINE, CALLED 2 TIMES, CODE SIZE REDUCTION:10 WORDS
 SUBOPT_0x0:
+	ST   -Y,R0
+	ST   -Y,R1
+	ST   -Y,R15
+	ST   -Y,R22
+	ST   -Y,R23
+	ST   -Y,R24
+	ST   -Y,R25
+	ST   -Y,R26
+	ST   -Y,R27
 	ST   -Y,R30
 	ST   -Y,R31
 	IN   R30,SREG
